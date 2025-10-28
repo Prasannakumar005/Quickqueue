@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>QuickQueue — Prototype</title>
+  <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+  <style>
+    /* Simple, clean styles for the prototype */
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#7c3aed;--muted:#9aa4b2;--glass:rgba(255,255,255,0.03)}
+    body{font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial;margin:0;background:linear-gradient(180deg,#071023 0%, #071730 100%);color:#e6eef8;}
+    .wrap{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center}
+    h1{margin:0;font-size:20px}
+    .grid{display:grid;grid-template-columns:1fr 360px;gap:18px;margin-top:18px}
+    .card{background:var(--card);padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input,select,button,textarea{font-size:14px;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:inherit;width:100%;box-sizing:border-box}
+    .row{display:flex;gap:8px}
+    .muted{color:var(--muted);font-size:13px}
+    .token-list{max-height:360px;overflow:auto;margin-top:10px}
+    .token{display:flex;justify-content:space-between;align-items:center;padding:8px;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);border-radius:8px;margin-bottom:8px}
+    .small{font-size:13px}
+    .btn{background:linear-gradient(90deg,var(--accent),#4c1d95);border:none;color:white;padding:10px 12px;border-radius:10px;cursor:pointer}
+    .btn.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04)}
+    .controls{display:flex;gap:8px;align-items:center}
+    .admin{margin-top:10px}
+    .qr{width:120px;height:120px;background:var(--glass);display:flex;align-items:center;justify-content:center;border-radius:8px}
+    .coins{background:#0a1726;padding:8px;border-radius:8px}
+    footer{margin-top:18px;color:var(--muted);font-size:13px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr;}.card{margin-bottom:12px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>QuickQueue — Prototype</h1>
+      <div class="muted">Light frontend-only prototype (uses localStorage). Includes Smart ETA, Silent Mode, QR token, Group tokens, Emergency priority, Voice updates & mini-games.</div>
+    </header>
+
+    <div class="grid">
+      <div>
+        <div class="card" id="new-token-card">
+          <label>Service / Desk</label>
+          <input id="service-name" placeholder="e.g. General Clinic" value="General Clinic">
+
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <div style="flex:1">
+              <label>Group size</label>
+              <input id="group-size" type="number" min="1" value="1">
+            </div>
+            <div style="width:130px">
+              <label>Priority</label>
+              <select id="priority-select">
+                <option value="normal">Normal</option>
+                <option value="emergency">Emergency</option>
+                <option value="vip">VIP</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:end">
+            <div style="flex:1">
+              <label>Your name (optional)</label>
+              <input id="user-name" placeholder="Name (optional)">
+            </div>
+            <button class="btn" id="take-token">Get Token</button>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+            <label style="margin:0">Silent Mode</label>
+            <input type="checkbox" id="silent-mode">
+            <div class="muted">When on, uses vibration or silent notifications.</div>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+            <label style="margin:0">Avg service time (mins)</label>
+            <input id="avg-service-time" type="number" value="6" min="1" style="width:80px">
+            <div class="muted">Used to compute ETA</div>
+          </div>
+
+          <div class="token-list" id="token-list"></div>
+        </div>
+
+        <div class="card admin">
+          <h3 style="margin:0 0 8px 0">Admin / Staff Controls</h3>
+          <div class="row">
+            <button class="btn secondary" id="serve-next">Serve Next</button>
+            <button class="btn secondary" id="call-current">Call Current</button>
+            <button class="btn" id="reset-queue">Reset Queue</button>
+          </div>
+
+          <div style="margin-top:10px">
+            <label>Currently serving (auto-updates)</label>
+            <div id="current-serving" class="muted">—</div>
+          </div>
+
+          <div style="margin-top:10px">
+            <label>Fairness log (last 20)</label>
+            <div id="fairness-log" class="muted" style="max-height:120px;overflow:auto"></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3 style="margin:0 0 8px 0">Mini Quiz — earn coins while waiting</h3>
+          <div id="game-area">
+            <div id="game-prompt" class="muted">Click Start to play a quick quiz. Win coins to skip spots.</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn" id="start-game">Start</button>
+              <button class="btn secondary" id="show-coins">My Coins</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h3 style="margin:0 0 8px 0">Your Token / QR</h3>
+          <div style="display:flex;gap:12px;align-items:center">
+            <div class="qr " id="qr-wrap">—</div>
+            <div style="flex:1">
+              <div id="my-token-number" class="small muted">No token yet</div>
+              <div id="my-eta" class="small" style="margin-top:6px">ETA: —</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn secondary" id="download-token">Download</button>
+                <button class="btn" id="notify-me">Notify me when near</button>
+              </div>
+              <div style="margin-top:8px" class="muted">Green savings: <span id="green-saved">0 mins</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3 style="margin:0 0 8px 0">Settings & Info</h3>
+          <div class="small muted">This is a frontend-only prototype. Data stored locally in your browser. To make multi-device, connect to a backend (Firebase).</div>
+
+          <div style="margin-top:10px">
+            <label>Voice announcements</label>
+            <div class="controls">
+              <button class="btn" id="toggle-voice">Toggle Voice</button>
+              <div id="voice-status" class="muted">Off</div>
+            </div>
+          </div>
+
+          <div style="margin-top:10px">
+            <label>Quick actions</label>
+            <div class="row" style="margin-top:6px">
+              <button class="btn secondary" id="copy-queue">Copy queue to clipboard</button>
+              <button class="btn secondary" id="export-json">Export JSON</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <h3 style="margin:0 0 8px 0">Stats</h3>
+          <div class="small muted">Average service: <span id="stat-avg">—</span> mins</div>
+          <div class="small muted">Tokens queued: <span id="stat-count">0</span></div>
+          <div class="small muted">Coins total (you): <span id="stat-coins">0</span></div>
+        </div>
+      </div>
+    </div>
+
+    <footer>Prototype by Edgers.</footer>
+  </div>
+
+  <!-- QRCode library from CDN (works when online) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+  <script>
+    // QuickQueue frontend-only prototype
+    // Data model: array of tokens stored in localStorage under 'quickqueue_tokens'
+
+    // utilities
+    const $ = id => document.getElementById(id);
+    const now = () => new Date().toISOString();
+
+    // app state
+    let tokens = JSON.parse(localStorage.getItem('quickqueue_tokens')||'[]');
+    let currentServing = localStorage.getItem('quickqueue_current') || null;
+    let voiceOn = false;
+    let coins = Number(localStorage.getItem('quickqueue_coins')||'0');
+
+    // load UI elements
+    const tokenListEl = $('token-list');
+    const qrWrap = $('qr-wrap');
+    const myTokenNumber = $('my-token-number');
+    const myEta = $('my-eta');
+    const greenSavedEl = $('green-saved');
+
+    function save(){ localStorage.setItem('quickqueue_tokens',JSON.stringify(tokens)); }
+
+    function formatToken(t){
+      const p = t.priority==='emergency'?'[EMER]':(t.priority==='vip'?'[VIP]':'');
+      return `#${t.number} ${p} ${t.name?('- '+t.name):''}`;
+    }
+
+    function refreshStats(){
+      const avg = Number($('avg-service-time').value)||6;
+      $('stat-avg').innerText = avg;
+      $('stat-count').innerText = tokens.length;
+      $('stat-coins').innerText = coins;
+    }
+
+    function computeETAFor(token){
+      // simple Smart ETA: count how many tokens ahead of this token excluding emergencies & using average service time
+      const avg = Number($('avg-service-time').value)||6;
+      const idx = tokens.findIndex(t=>t.id===token.id);
+      if(idx===-1) return null;
+      // tokens ahead that are not served yet
+      const ahead = tokens.slice(0,idx).filter(t=>!t.served);
+      // but emergencies and VIPs reorder: we assume emergencies are prioritized to front when created
+      const time = ahead.length * avg;
+      return time; // minutes
+    }
+
+    function updateMyTokenArea(){
+      const myTokenId = localStorage.getItem('quickqueue_my_token');
+      if(!myTokenId){ myTokenNumber.innerText='No token yet'; qrWrap.innerHTML='—'; myEta.innerText='ETA: —'; greenSavedEl.innerText='0 mins'; return; }
+      const t = tokens.find(x=>x.id===myTokenId);
+      if(!t){ myTokenNumber.innerText='No token yet'; qrWrap.innerHTML='—'; myEta.innerText='ETA: —'; greenSavedEl.innerText='0 mins'; return; }
+      myTokenNumber.innerText = formatToken(t);
+      const eta = computeETAFor(t);
+      myEta.innerText = 'ETA: ' + eta + ' mins';
+      greenSavedEl.innerText = Math.max(0, Math.round(Math.max(0, (tokens.length - (t.position||0)) * (Number($('avg-service-time').value)||6) * 0.05))) + ' mins (est)';
+      // generate QR
+      const payload = JSON.stringify({id:t.id, number:t.number, service:t.service, name:t.name, time:t.createdAt});
+      qrWrap.innerHTML = '';
+      QRCode.toCanvas(payload, {width:120}, function (err, canvas) {
+        if(err){ qrWrap.innerText = 'QR Err'; return; }
+        qrWrap.appendChild(canvas);
+      });
+    }
+
+    function render(){
+      tokenListEl.innerHTML='';
+      tokens.forEach((t,i)=>{
+        const div = document.createElement('div'); div.className='token';
+        const left = document.createElement('div');
+        left.innerHTML = `<div style="font-weight:600">${t.number} ${t.priority==='emergency'?'<span style="color:#ffdcdc">[EMER]</span>':''}</div><div class="muted small">${t.service} ${t.name?('- '+t.name):''}</div>`;
+        const right = document.createElement('div');
+        right.style.textAlign='right';
+        right.innerHTML = `<div class="small muted">${t.served?'<em>Served</em>':'Waiting'}</div><div style="margin-top:6px" class="row"><button class="btn secondary" data-id="${t.id}" onclick="copyToken('${t.id}')">Copy</button><button class="btn" data-id="${t.id}" onclick="claimSkip('${t.id}')">Skip</button></div>`;
+        div.appendChild(left); div.appendChild(right);
+        tokenListEl.appendChild(div);
+      });
+      updateMyTokenArea();
+      refreshStats();
+    }
+
+    // token creation
+    function takeToken(){
+      const service = $('service-name').value||'Service';
+      const groupSize = Math.max(1, Number($('group-size').value)||1);
+      const priority = $('priority-select').value;
+      const name = $('user-name').value||'';
+      // assign number sequentially
+      const lastNum = tokens.length?Math.max(...tokens.map(t=>t.number)):0;
+      const number = lastNum+1;
+      const id = 't_'+Math.random().toString(36).slice(2,9);
+      const token = {id,number,service,groupSize,priority,name,createdAt:now(),served:false,position:number};
+      // if emergency, move to front
+      if(priority==='emergency') tokens.unshift(token);
+      else tokens.push(token);
+      save();
+      localStorage.setItem('quickqueue_my_token', id);
+      addFairnessLog(`Token ${number} created (${priority})`);
+      render();
+      // show a quick visual toast
+      alert('Token #' + number + ' created!');
+    }
+
+    // fairness log
+    function addFairnessLog(msg){
+      const list = JSON.parse(localStorage.getItem('quickqueue_fairness')||'[]');
+      list.unshift(new Date().toLocaleString()+ ' — ' + msg);
+      localStorage.setItem('quickqueue_fairness', JSON.stringify(list.slice(0,50)));
+      renderFairness();
+    }
+    function renderFairness(){
+      const list = JSON.parse(localStorage.getItem('quickqueue_fairness')||'[]');
+      $('fairness-log').innerHTML = list.map(l=>'<div>'+l+'</div>').join('');
+    }
+
+    // staff actions
+    function serveNext(){
+      // find next unserved token, prefer emergencies first
+      const nextIdx = tokens.findIndex(t=>!t.served && t.priority==='emergency');
+      let idx = nextIdx;
+      if(idx===-1) idx = tokens.findIndex(t=>!t.served);
+      if(idx===-1){ alert('No waiting tokens'); return; }
+      tokens[idx].served = true;
+      currentServing = tokens[idx].number;
+      localStorage.setItem('quickqueue_current', currentServing);
+      addFairnessLog(`Served token ${tokens[idx].number}`);
+      save(); render();
+      announce('Now serving token number ' + tokens[idx].number);
+    }
+
+    function callCurrent(){
+      const cur = localStorage.getItem('quickqueue_current');
+      if(!cur){ alert('No one is being served right now'); return; }
+      announce('Now serving token number ' + cur);
+    }
+
+    function resetQueue(){ if(confirm('Reset entire queue?')){ tokens = []; save(); localStorage.removeItem('quickqueue_my_token'); localStorage.removeItem('quickqueue_current'); render(); addFairnessLog('Queue reset'); }}
+
+    // voice helper
+    function announce(text){
+      if(voiceOn){ const u = new SpeechSynthesisUtterance(text); speechSynthesis.speak(u); }
+      if($('silent-mode').checked){ try{ navigator.vibrate && navigator.vibrate(200); }catch(e){} }
+    }
+
+    // mini-game (very simple)
+    function startGame(){
+      const a = Math.floor(Math.random()*9)+1;
+      const b = Math.floor(Math.random()*9)+1;
+      const correct = a+b;
+      const ans = prompt(`What is ${a} + ${b}? (Answer quickly to earn coins)`);
+      if(ans===null) return;
+      if(Number(ans)===correct){ coins+=2; localStorage.setItem('quickqueue_coins',coins); alert('Correct! +2 coins'); } else { alert('Wrong. Try again later.'); }
+      render();
+    }
+
+    // coins features: skip spots
+    function claimSkip(tokenId){
+      const t = tokens.find(x=>x.id===tokenId);
+      if(!t) return;
+      if(coins<3){ alert('Need 3 coins to skip 1 spot. Earn coins in the mini-game.'); return; }
+      if(!confirm('Spend 3 coins to move this token one spot forward?')) return;
+      coins-=3; localStorage.setItem('quickqueue_coins',coins);
+      const idx = tokens.findIndex(x=>x.id===tokenId);
+      if(idx>0){ const tmp = tokens[idx-1]; tokens[idx-1]=tokens[idx]; tokens[idx]=tmp; addFairnessLog(`Token ${t.number} used 3 coins to skip one spot`); save(); render(); }
+    }
+
+    // utility: copy token
+    function copyToken(id){
+      const t = tokens.find(x=>x.id===id);
+      if(!t) return;
+      navigator.clipboard.writeText(JSON.stringify(t)).then(()=>alert('Token copied to clipboard'));
+    }
+
+    // expose used in DOM onclick
+    window.copyToken = copyToken; window.claimSkip = claimSkip;
+
+    // other helpers
+    $('take-token').addEventListener('click', takeToken);
+    $('serve-next').addEventListener('click', serveNext);
+    $('call-current').addEventListener('click', callCurrent);
+    $('reset-queue').addEventListener('click', resetQueue);
+    $('start-game').addEventListener('click', startGame);
+    $('show-coins').addEventListener('click', ()=>alert('You have ' + coins + ' coins'));
+    $('toggle-voice').addEventListener('click', ()=>{ voiceOn=!voiceOn; $('voice-status').innerText = voiceOn? 'On':'Off'; });
+    $('copy-queue').addEventListener('click', ()=>{ navigator.clipboard.writeText(JSON.stringify(tokens, null, 2)).then(()=>alert('Queue copied'))});
+    $('export-json').addEventListener('click', ()=>{ const data = 'data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(tokens)); const a=document.createElement('a'); a.href=data; a.download='quickqueue_export.json'; a.click(); });
+    $('notify-me').addEventListener('click', ()=>{ alert('You will be notified (in this tab) when your token is within 2 spots. Keep this tab open.'); localStorage.setItem('quickqueue_notify','true'); });
+    $('download-token').addEventListener('click', ()=>{
+      const canvas = qrWrap.querySelector('canvas'); if(!canvas){ alert('No QR to download'); return; }
+      const a = document.createElement('a'); a.href = canvas.toDataURL('image/png'); a.download = 'quickqueue_token.png'; a.click();
+    });
+
+    // notification watcher — simple polling
+    setInterval(()=>{
+      // update current serving UI
+      const cur = localStorage.getItem('quickqueue_current');
+      $('current-serving').innerText = cur?('#'+cur):'—';
+      renderFairness();
+      // check notify for my token
+      const myTokenId = localStorage.getItem('quickqueue_my_token');
+      if(myTokenId && localStorage.getItem('quickqueue_notify')==='true'){
+        const myIdx = tokens.findIndex(t=>t.id===myTokenId && !t.served);
+        if(myIdx>-1 && myIdx<=2){ // within 2 spots
+          // notify once
+          localStorage.removeItem('quickqueue_notify');
+          if($('silent-mode').checked){ try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){} }
+          if(voiceOn) announce('Your token is approaching. Please be ready.');
+          alert('Your token is within 2 spots. Please be ready.');
+        }
+      }
+      // update UI
+      render();
+    }, 2000);
+
+    // initialize
+    renderFairness(); render();
+  </script>
+</body>
+
+</html>
